@@ -39,7 +39,7 @@ type chart struct {
 }
 
 func buildChart(run Run) chart {
-	const w, h, top, bottom, left = 960.0, 300.0, 30.0, 40.0, 50.0
+	const w, h, top, bottom, left = 960.0, 300.0, 32.0, 40.0, 50.0
 	c := chart{W: w, H: h, PlotBottom: h - bottom}
 	n := len(run.Buckets)
 	if n == 0 {
@@ -61,8 +61,10 @@ func buildChart(run Run) chart {
 		x0 := x(float64(win.Start.Sub(run.Start)) / float64(run.Step))
 		x1 := x(float64(win.End.Sub(run.Start)) / float64(run.Step))
 		c.Faults = append(c.Faults, template.HTML(fmt.Sprintf(
-			`<rect class="fault" x="%.1f" y="%.1f" width="%.1f" height="%.1f"><title>%s</title></rect>`,
-			x0, top, x1-x0, plotH, template.HTMLEscapeString(win.Text))))
+			`<rect class="fault" x="%.1f" y="%.1f" width="%.1f" height="%.1f"><title>%s</title></rect>`+
+				`<rect class="faultbar" x="%.1f" y="%.1f" width="%.1f" height="6"><title>%s</title></rect>`,
+			x0, top, x1-x0, plotH, template.HTMLEscapeString(win.Text),
+			x0, h-bottom+3, x1-x0, template.HTMLEscapeString(win.Text))))
 	}
 	for i, b := range run.Buckets {
 		y := h - bottom
@@ -94,7 +96,7 @@ func buildChart(run Run) chart {
 	}
 	for i := 0; i <= n; i += every {
 		c.Ticks = append(c.Ticks, template.HTML(fmt.Sprintf(
-			`<text class="tick" x="%.1f" y="%.1f">%v</text>`, x(float64(i)), h-bottom+18, time.Duration(i)*run.Step)))
+			`<text class="tick" x="%.1f" y="%.1f">%v</text>`, x(float64(i)), h-bottom+24, time.Duration(i)*run.Step)))
 	}
 	row := 0
 	for _, e := range run.Events {
@@ -102,13 +104,11 @@ func buildChart(run Run) chart {
 			continue
 		}
 		xe := x(float64(e.Time.Sub(run.Start)) / float64(run.Step))
-		label := e.Text
-		if e.Kind == "heal" {
-			label = "healed"
-		}
+		label := map[string]string{"fault": "✂ network cut", "heal": "✓ healed", "primary": "⚑ new primary"}[e.Kind]
 		c.Markers = append(c.Markers, template.HTML(fmt.Sprintf(
-			`<line class="marker" x1="%.1f" x2="%.1f" y1="%.1f" y2="%.1f"/><text class="mlabel" x="%.1f" y="%.1f">%s</text>`,
-			xe, xe, top-4, h-bottom, xe+4, 12+float64(row%2)*13, template.HTMLEscapeString(label))))
+			`<line class="marker" x1="%.1f" x2="%.1f" y1="%.1f" y2="%.1f"/><text class="mlabel" x="%.1f" y="%.1f"><title>%s</title>%s</text>`,
+			xe, xe, top-4, h-bottom, xe+3, 11+float64(row%2)*13,
+			template.HTMLEscapeString(e.Text), template.HTMLEscapeString(label))))
 		row++
 	}
 	return c
@@ -126,7 +126,7 @@ h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}
 .verdict{font-size:28px;font-weight:700;margin:20px 0 4px}.bad{color:var(--lost)}.good{color:var(--kept)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:16px 0;overflow-x:auto}
 svg{width:100%;height:auto;min-width:600px}
-.kept{fill:var(--kept)}.lost{fill:var(--lost)}.unknown{fill:var(--unknown)}.failed{fill:var(--failed)}.fault{fill:var(--fault)}
+.kept{fill:var(--kept)}.lost{fill:var(--lost)}.unknown{fill:var(--unknown)}.failed{fill:var(--failed)}.fault{fill:var(--fault)}.faultbar{fill:var(--lost)}
 .marker{stroke:var(--muted);stroke-dasharray:3 3}.mlabel,.tick{fill:var(--muted);font-size:11px}
 .legend span{display:inline-block;margin-right:14px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
 table{border-collapse:collapse}td{padding:2px 14px 2px 0}code{font:13px ui-monospace,monospace}
@@ -140,7 +140,7 @@ ul{padding-left:20px}
 {{end}}
 {{range .Run.Explain}}<div>{{.}}</div>{{end}}
 <div class="card">
-<div class="legend muted"><span><i style="background:var(--kept)"></i>acknowledged, kept</span><span><i style="background:var(--lost)"></i>acknowledged, lost</span><span><i style="background:var(--unknown)"></i>unknown</span><span><i style="background:var(--failed)"></i>refused</span><span><i style="background:var(--fault)"></i>network fault</span></div>
+<div class="legend muted"><span><i style="background:var(--kept)"></i>acknowledged, kept</span><span><i style="background:var(--lost)"></i>acknowledged, lost</span><span><i style="background:var(--unknown)"></i>unknown</span><span><i style="background:var(--failed)"></i>refused</span><span><i style="background:var(--lost);height:4px;vertical-align:middle"></i>network fault (under the axis)</span></div>
 <svg viewBox="0 0 {{.Chart.W}} {{.Chart.H}}" role="img" aria-label="writes per {{.Run.Step}}">
 {{range .Chart.Faults}}{{.}}{{end}}{{range .Chart.Bars}}{{.}}{{end}}{{range .Chart.Markers}}{{.}}{{end}}{{range .Chart.Ticks}}{{.}}{{end}}
 <text class="tick" x="4" y="34">{{.Chart.Max}}/{{.Run.Step}}</text>
