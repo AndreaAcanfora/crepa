@@ -101,6 +101,9 @@ errors, so you can put crepa in CI.
 
 ## Install
 
+Download a binary for Linux (amd64 or arm64) from the
+[releases](https://github.com/AndreaAcanfora/crepa/releases), or build it:
+
 ```
 go install github.com/AndreaAcanfora/crepa/cmd/crepa@latest
 ```
