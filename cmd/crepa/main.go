@@ -162,8 +162,14 @@ func (c *config) validate() error {
 
 func runRedis(ctx context.Context, cfg config) (code int, err error) {
 	out := os.Stdout
-	start := time.Now()
-	logf := func(format string, args ...any) { report.Log(out, start, format, args...) }
+	var start time.Time
+	logf := func(format string, args ...any) {
+		if start.IsZero() {
+			fmt.Fprintf(out, "%8s %s\n", "·", fmt.Sprintf(format, args...))
+			return
+		}
+		report.Log(out, start, format, args...)
+	}
 	proj := &docker.Project{Files: cfg.files, Name: cfg.project, Run: docker.CLI}
 	nw := &docker.Net{Run: docker.CLI, Project: cfg.project}
 
@@ -231,6 +237,10 @@ func runRedis(ctx context.Context, cfg config) (code int, err error) {
 
 	h := history.New()
 	start = h.Start
+	h.OnEvent = func(e history.Event) {
+		prefix := map[string]string{"fault": "✂ ", "heal": "✓ ", "primary": "⚑ "}[e.Kind]
+		logf("%s%s", prefix, e.Text)
+	}
 	logf("primary is %s; writing %.0f/s from %d clients%s", primary.Name, cfg.workload.Rate, cfg.workload.Clients, waitNote(cfg.workload))
 	wctx, stopWriting := context.WithCancel(ctx)
 	done := make(chan struct{})
@@ -268,7 +278,6 @@ func runRedis(ctx context.Context, cfg config) (code int, err error) {
 			return 2, err
 		}
 		h.Event("fault", text)
-		logf("✂ %s", text)
 		if err := sleep(cfg.fault); err != nil {
 			nw.Heal(context.Background())
 			return 2, err
@@ -277,7 +286,6 @@ func runRedis(ctx context.Context, cfg config) (code int, err error) {
 			return 2, err
 		}
 		h.Event("heal", "network healed")
-		logf("network healed")
 		if err := sleep(cfg.recov); err != nil {
 			return 2, err
 		}
@@ -288,11 +296,6 @@ func runRedis(ctx context.Context, cfg config) (code int, err error) {
 		}
 	}
 	stopAll()
-	for _, e := range h.Events() {
-		if e.Kind == "primary" {
-			logf("(at %.1fs) %s", e.Time.Sub(start).Seconds(), e.Text)
-		}
-	}
 	logf("stopped writing; waiting for the nodes to agree")
 	final, err := cl.WaitHealthy(ctx, 60*time.Second)
 	if err != nil {
@@ -430,6 +433,10 @@ func explain(r history.Report, events []history.Event, first docker.Container, s
 		out = append(out,
 			fmt.Sprintf("%s kept acknowledging writes while it was cut off from the replicas and the sentinels.", first.Name),
 			fmt.Sprintf("%s. When the network healed, %s became a replica and threw away what it had accepted alone.", promoted[0], first.Name))
+		if after := len(r.Lost) - r.LostInFault; after > 0 {
+			out = append(out, fmt.Sprintf("%s of the lost writes came after the heal: %s still answered as primary until Sentinel demoted it.",
+				report.Commas(after), first.Name))
+		}
 	}
 	switch {
 	case strings.HasPrefix(safety, "min-replicas-to-write 0") && w.WaitReplicas == 0:

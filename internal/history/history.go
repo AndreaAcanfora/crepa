@@ -47,6 +47,8 @@ type Event struct {
 // History collects ops and events from many goroutines.
 type History struct {
 	Start time.Time
+	// OnEvent, if set, is called with every event as it is recorded.
+	OnEvent func(Event)
 
 	mu     sync.Mutex
 	ops    []Op
@@ -65,9 +67,13 @@ func (h *History) Add(op Op) {
 
 // Event records one event at the current time.
 func (h *History) Event(kind, text string) {
+	e := Event{Time: time.Now(), Kind: kind, Text: text}
 	h.mu.Lock()
-	h.events = append(h.events, Event{Time: time.Now(), Kind: kind, Text: text})
+	h.events = append(h.events, e)
 	h.mu.Unlock()
+	if h.OnEvent != nil {
+		h.OnEvent(e)
+	}
 }
 
 // Ops returns the ops sorted by start time.
