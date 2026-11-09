@@ -75,6 +75,20 @@ func (c *Cluster) init() {
 	}
 }
 
+// lookup finds a node by IP address or, since replicas may name their primary
+// by hostname, by compose service or container name.
+func (c *Cluster) lookup(host string) docker.Container {
+	if n, ok := c.byIP[host]; ok {
+		return n
+	}
+	for _, n := range c.Nodes {
+		if host == n.Service || host == n.Name {
+			return n
+		}
+	}
+	return docker.Container{}
+}
+
 func (c *Cluster) addr(n docker.Container) string {
 	return net.JoinHostPort(n.IP(), strconv.Itoa(c.Port))
 }
@@ -130,8 +144,8 @@ func (c *Cluster) askSentinel(s docker.Container) (docker.Container, error) {
 	if err != nil || len(addr) != 2 {
 		return docker.Container{}, fmt.Errorf("sentinel %s does not know master %q", s.Name, c.MasterName)
 	}
-	n, ok := c.byIP[addr[0]]
-	if !ok {
+	n := c.lookup(addr[0])
+	if n.ID == "" {
 		return docker.Container{}, fmt.Errorf("sentinel %s names %s, which is not a node", s.Name, addr[0])
 	}
 	return n, nil
@@ -211,7 +225,7 @@ func (c *Cluster) healthy() (docker.Container, error) {
 		if err != nil {
 			return primary, err
 		}
-		if info["role"] != "slave" || info["master_link_status"] != "up" || c.byIP[info["master_host"]].ID != primary.ID {
+		if info["role"] != "slave" || info["master_link_status"] != "up" || c.lookup(info["master_host"]).ID != primary.ID {
 			return primary, fmt.Errorf("%s does not replicate from %s yet", n.Name, primary.Name)
 		}
 	}
