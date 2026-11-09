@@ -1,0 +1,33 @@
+# Redis 7.4 with three nodes and three Sentinels, in the default
+# configuration: an isolated primary keeps accepting writes.
+#
+#   crepa redis -f examples/redis-sentinel/compose.yaml
+x-sentinel: &sentinel
+  image: redis:7.4-alpine
+  depends_on: [redis-1, redis-2, redis-3]
+  command:
+    - sh
+    - -c
+    - |
+      cat > /tmp/sentinel.conf <<CONF
+      port 26379
+      sentinel resolve-hostnames yes
+      sentinel monitor mymaster redis-1 6379 2
+      sentinel down-after-milliseconds mymaster 2000
+      sentinel failover-timeout mymaster 10000
+      CONF
+      exec redis-sentinel /tmp/sentinel.conf
+
+services:
+  redis-1:
+    image: redis:7.4-alpine
+    command: redis-server --save "" --appendonly no
+  redis-2:
+    image: redis:7.4-alpine
+    command: redis-server --save "" --appendonly no --replicaof redis-1 6379
+  redis-3:
+    image: redis:7.4-alpine
+    command: redis-server --save "" --appendonly no --replicaof redis-1 6379
+  sentinel-1: *sentinel
+  sentinel-2: *sentinel
+  sentinel-3: *sentinel
