@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build binaries for
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: |
+          for arch in amd64 arm64; do
+            name=crepa_${TAG#v}_linux_$arch
+            mkdir -p dist/$name
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${TAG#v}" -o dist/$name/crepa ./cmd/crepa
+            cp README.md LICENSE dist/$name/
+            tar -C dist -czf dist/$name.tar.gz $name
+          done
+          ./dist/crepa_${TAG#v}_linux_amd64/crepa version
+          (cd dist && sha256sum *.tar.gz > checksums.txt)
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.tar.gz dist/checksums.txt --clobber
