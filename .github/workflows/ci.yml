@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  redis-sentinel:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            files: -f examples/redis-sentinel/compose.yaml
+            flags: ""
+            expect: 1
+          - name: min-replicas
+            files: -f examples/redis-sentinel/compose.yaml -f examples/redis-sentinel/compose.min-replicas.yaml
+            flags: ""
+            expect: 1
+          - name: wait
+            files: -f examples/redis-sentinel/compose.yaml
+            flags: --wait-replicas 1
+            expect: 0
+          - name: no-fault
+            files: -f examples/redis-sentinel/compose.yaml
+            flags: --nemesis none
+            expect: 0
+    name: redis-sentinel (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build -o /tmp/crepa ./cmd/crepa
+      - name: Run crepa
+        run: |
+          set +e
+          /tmp/crepa redis ${{ matrix.files }} ${{ matrix.flags }} --warmup 5s --fault 20s --recover 15s \
+            --report report-${{ matrix.name }}.html
+          code=$?
+          set -e
+          test "$code" = "${{ matrix.expect }}" || { echo "expected exit ${{ matrix.expect }}, got $code"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report-${{ matrix.name }}
+          path: report-${{ matrix.name }}.html
+          if-no-files-found: ignore

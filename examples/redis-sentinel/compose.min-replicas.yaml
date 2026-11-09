@@ -1,0 +1,11 @@
+# Override: the configuration the Redis docs suggest against this problem.
+# A primary that has not heard from any replica for 5 seconds refuses writes.
+#
+#   crepa redis -f examples/redis-sentinel/compose.yaml -f examples/redis-sentinel/compose.min-replicas.yaml
+services:
+  redis-1:
+    command: redis-server --save "" --appendonly no --min-replicas-to-write 1 --min-replicas-max-lag 5
+  redis-2:
+    command: redis-server --save "" --appendonly no --min-replicas-to-write 1 --min-replicas-max-lag 5 --replicaof redis-1 6379
+  redis-3:
+    command: redis-server --save "" --appendonly no --min-replicas-to-write 1 --min-replicas-max-lag 5 --replicaof redis-1 6379
