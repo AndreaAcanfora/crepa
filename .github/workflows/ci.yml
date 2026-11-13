@@ -12,8 +12,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: test -z "$(gofmt -l .)"
@@ -44,8 +44,8 @@ jobs:
             expect: 0
     name: redis-sentinel (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: go build -o /tmp/crepa ./cmd/crepa
@@ -57,7 +57,7 @@ jobs:
           code=$?
           set -e
           test "$code" = "${{ matrix.expect }}" || { echo "expected exit ${{ matrix.expect }}, got $code"; exit 1; }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: report-${{ matrix.name }}
